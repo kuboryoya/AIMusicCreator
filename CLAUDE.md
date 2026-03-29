@@ -11,16 +11,18 @@ chromePlugin/                 # ③ SunoへCSVを一括流し込み（ダウン�
 inputDB/                      # ④ ダウンロードしたMP3を処理・DBへ投入
 ```
 
-## ① musicGeneratePrompt/
+## ① musicGeneratePrompt.py
 
 - プレイリスト名を引数で指定する
-- Claude API を使って Suno 用プロンプトを生成
-- 出力形式: CSV（1列目: タイトル、2列目: プロンプト）
-- 生成した CSV は `csv/` フォルダに保存する
+- OpenAI (gpt-4o) を使って Suno 用プロンプトを50曲分生成（25曲×2バッチ）
+- 出力形式: CSV（Title, Suno Prompt, Genre, BPM, vibe_tags）
+- 生成した CSV は `csv/` フォルダに `{プレイリスト名}_prompt.csv` として保存
+- Google スプレッドシートにも同名シートで保存
+- タイトル重複時は自動でサフィックス付与（例: `Whispering Pines (2)`）
 
 ```bash
-npx ts-node musicGeneratePrompt/index.ts --playlist "Cafe BGM"
-# → csv/cafe-bgm.csv を生成
+python musicGeneratePrompt.py 'Cafe BGM'
+# → csv/Cafe BGM_prompt.csv を生成 + Google Sheets に保存
 ```
 
 ## ② csv/
@@ -36,15 +38,36 @@ npx ts-node musicGeneratePrompt/index.ts --playlist "Cafe BGM"
 - 生成間隔は60秒（設定可能）
 - **ダウンロードは手動**で行う
 
-## ④ inputDB/
+## ④ inputDB/process.py
 
-- ダウンロードした MP3 を `input/` フォルダに置いて実行する
+- ダウンロードした MP3 を `inputDB/{プレイリスト名}/` フォルダに置いて実行する
 - 処理内容：
   1. MP3 から埋め込み画像（アルバムアート）を分離して抽出
-  2. MP3 ファイルを Cloudflare R2 にアップロード
-  3. 画像ファイルを Cloudflare R2 にアップロード
+  2. MP3 ファイルを Cloudflare R2 にアップロード（パス: `{slug}/{曲名}.mp3`）
+  3. 画像ファイルを Cloudflare R2 にアップロード（パス: `{slug}/{曲名}.jpg`）
   4. R2 のパス・メタデータを Supabase の `tracks` テーブルに登録
-  5. `playlist` テーブルに公式プレイリストとして追加 `playlist_tracks` テーブルに曲を追加
+  5. `playlists` テーブルに公式プレイリストとして取得 or 作成
+  6. `playlist_tracks` テーブルに曲を追加（position は既存の続きから採番）
+
+```bash
+python inputDB/process.py 'EDM & Festival'
+# → inputDB/EDM & Festival/*.mp3 を処理
+```
+
+## ⑤ backfill_metadata.py
+
+- inputDB で登録済みのトラックに対して、CSVからメタデータを埋め戻す
+- r2_key のパス（slug）でDBからトラックを取得し、タイトルでCSVとマッチング
+- 処理内容：
+  1. CSVから `suno_prompt`, `genre`, `bpm`, `vibe_tags` を埋める
+  2. OpenAI (gpt-4o) で `use_case`（利用シーン配列）と `energy_level`（1-5整数）を生成
+  3. Supabase の `tracks` テーブルを更新
+- CSVヘッダーは `vibe_tags` / `Mood` どちらにも対応
+
+```bash
+python backfill_metadata.py 'Lo-Fi Hip Hop'
+# → lo-fi-hip-hop/* のトラックを csv/Lo-Fi Hip Hop_prompt.csv で埋め戻し
+```
 
 
 ## tracks（楽曲メタデータ）
