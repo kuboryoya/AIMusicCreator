@@ -49,16 +49,22 @@ npx ts-node musicGeneratePrompt/index.ts --playlist "Cafe BGM"
 
 ## tracks（楽曲メタデータ）
 
-| カラム | 型 | 説明 |
-|---|---|---|
-| id | uuid | PK |
-| title | text | 曲名 |
-| artist | text | アーティスト名 |
-| album | text | アルバム名 |
-| duration | int | 再生時間（秒） |
-| r2_key | text | R2上のMP3パス |
-| image_r2_key | text | R2上の画像パス |
-| created_at | timestamptz | |
+カラム名,型,説明
+id,uuid,PK (主キー)
+title,text,曲名
+artist,text,アーティスト名
+album,text,アルバム名（プレイリスト名など）
+r2_key,text,R2上のMP3ファイルパス
+image_r2_key,text,R2上のジャケット画像パス
+genre,text,ジャンル（例: Progressive Trance）
+bpm,integer,テンポ（フィルタリング・ソート用）
+energy_level,integer,1（静寂）〜5（激しい）の5段階評価
+vibe_tags,text[],"特徴タグ（例: ['uplifting', 'cosmic']）"
+use_case,text[],"用途（例: ['focus', 'coding', 'cafe']）"
+is_instrumental,boolean,インスト曲フラグ（今回は基本 True）
+duration_sec,integer,再生時間（秒）
+suno_prompt,text,生成時のプロンプト（AI分析・再生成用）
+created_at,timestamptz,レコード作成日時
 
 ## playlists（公式＋ユーザープレイリスト）
 

@@ -41,17 +41,19 @@ Generate {count} unique instrumental music tracks for this playlist.
 Return a JSON object with a "tracks" key containing a list of objects.
 Each object must have:
 - "title": Creative and evocative track title (in English)
-- "prompt": A detailed SunoAI generation prompt describing the sound. MUST include "no vocals, instrumental". Include specific details about instruments, tempo, mood, texture, and production style.
+- "prompt": A detailed SunoAI generation prompt describing the sound. MUST include "no vocals, instrumental". Include specific details about instruments, tempo, vibe_tags, texture, and production style.
 - "genre": Specific sub-genre that fits the playlist theme
 - "bpm": Appropriate BPM as an integer
-- "mood": 2-3 mood/atmosphere keywords separated by commas
+- "vibe_tags": 2-3 mood/atmosphere keywords separated by commas
 
 Requirements:
 - Every prompt MUST contain the phrase "no vocals, instrumental"
+- Every prompt MUST contain the phrase "extended full-length track, approximately 5 minutes"
+- Every prompt MUST describe a multi-section song structure (e.g. intro, verse, build-up, chorus/climax, bridge, outro) to encourage longer generation
 - All tracks must fit the "{playlist_name}" playlist theme
-- Vary the BPM, instruments, mood, and sub-genres within the playlist's scope to create diversity
+- Vary the BPM, instruments, vibe_tags, and sub-genres within the playlist's scope to create diversity
 - Avoid repetitive or similar-sounding tracks
-- Prompts should be detailed enough for SunoAI to produce distinct tracks (50-100 words each)
+- Prompts should be detailed enough for SunoAI to produce distinct tracks (80-120 words each)
 - If this is batch {batch_num} of {total_batches}, ensure variety from previous batches by exploring different tempos and textures
 """
 
@@ -64,11 +66,14 @@ Requirements:
             batch_json = json.loads(response.choices[0].message.content)
             items = batch_json.get("tracks", [])
 
-            # "no vocals, instrumental" が含まれていない場合は補完
+            # 必須フレーズが含まれていない場合は補完
             for item in items:
                 p = item.get("prompt", "")
                 if "no vocals" not in p.lower():
-                    item["prompt"] = p.rstrip(".") + ". No vocals, instrumental."
+                    p = p.rstrip(".") + ". No vocals, instrumental."
+                if "extended" not in p.lower():
+                    p = p.rstrip(".") + ". Extended full-length track, approximately 5 minutes."
+                item["prompt"] = p
 
             all_tracks.extend(items)
             print(f"  -> Got {len(items)} tracks")
@@ -89,14 +94,14 @@ def save_to_csv(tracks: list[dict], playlist_name: str) -> str:
 
     with open(filepath, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Title", "Suno Prompt", "Genre", "BPM", "Mood"])
+        writer.writerow(["Title", "Suno Prompt", "Genre", "BPM", "vibe_tags"])
         for track in tracks:
             writer.writerow([
                 track.get("title", ""),
                 track.get("prompt", ""),
                 track.get("genre", ""),
                 track.get("bpm", 0),
-                track.get("mood", ""),
+                track.get("vibe_tags", ""),
             ])
 
     print(f"Saved {len(tracks)} tracks to {filepath}")
@@ -125,7 +130,7 @@ def save_to_sheets(tracks: list[dict], playlist_name: str) -> None:
     except gspread.exceptions.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=playlist_name, rows=str(len(tracks) + 1), cols="5")
 
-    headers = ["Title", "Suno Prompt", "Genre", "BPM", "Mood"]
+    headers = ["Title", "Suno Prompt", "Genre", "BPM", "vibe_tags"]
     rows = [headers]
     for track in tracks:
         rows.append([
@@ -133,7 +138,7 @@ def save_to_sheets(tracks: list[dict], playlist_name: str) -> None:
             track.get("prompt", ""),
             track.get("genre", ""),
             track.get("bpm", 0),
-            track.get("mood", ""),
+            track.get("vibe_tags", ""),
         ])
 
     sheet.update(range_name=f"A1:E{len(rows)}", values=rows)
@@ -151,19 +156,17 @@ if __name__ == "__main__":
 
     tracks = generate_music_prompts(playlist_name, total_count=50)
 
-    # タイトルの重複チェック
-    titles = [t.get("title", "") for t in tracks]
+    # タイトルの重複を解消（重複があればサフィックスを付与）
     seen: dict[str, int] = {}
-    duplicates: list[str] = []
-    for title in titles:
-        key = title.strip().lower()
+    for track in tracks:
+        title = track.get("title", "").strip()
+        key = title.lower()
         if key in seen:
-            duplicates.append(title)
+            seen[key] += 1
+            track["title"] = f"{title} ({seen[key]})"
+            print(f"  Renamed duplicate: '{title}' -> '{track['title']}'")
         else:
             seen[key] = 1
-    if duplicates:
-        print(f"ERROR: Duplicate titles found: {duplicates}")
-        sys.exit(1)
 
     save_to_csv(tracks, playlist_name)
     save_to_sheets(tracks, playlist_name)
