@@ -9,6 +9,8 @@ musicGeneratePrompt/          # ① Suno用プロンプトCSVを生成
 chromePlugin/                 # ③ SunoへCSVを一括流し込み（ダウンロードは手動）
         ↓
 inputDB/                      # ④ ダウンロードしたMP3を処理・DBへ投入
+backfill_metadata.py          # ⑤ CSVからメタデータを埋め戻し
+upload_playlist_covers.py     # ⑥ プレイリストカバー画像をR2+DBに登録
 ```
 
 ## ① musicGeneratePrompt.py
@@ -69,6 +71,20 @@ python backfill_metadata.py 'Lo-Fi Hip Hop'
 # → lo-fi-hip-hop/* のトラックを csv/Lo-Fi Hip Hop_prompt.csv で埋め戻し
 ```
 
+
+## ⑥ upload_playlist_covers.py
+
+- `playlists/` フォルダ内の画像をまとめて処理する
+- ファイル名（拡張子なし）= プレイリスト名としてDBとマッチング
+- 処理内容：
+  1. 画像ファイル (jpg/png/webp) を Cloudflare R2 にアップロード（パス: `playlists/{ファイル名}`）
+  2. Supabase の `playlists` テーブルの `cover_image_url` を R2 キーで更新
+- DBにマッチしないファイルはR2アップロードのみ（DB更新はスキップ）
+
+```bash
+python upload_playlist_covers.py
+# → playlists/*.jpg を R2 にアップロード + DB更新
+```
 
 ## tracks（楽曲メタデータ）
 
